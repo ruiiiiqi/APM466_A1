@@ -9,7 +9,7 @@ To use this project, you may start as follows:
 
 Notice:
 
-This project uses too many for loop. Thus for step 1, 2 and 3, it will take nearly 10 min for each module. However, you may make it more efficient if you want. I am not gonna to do it, tho. ^-^
+This project uses too many for-loop. Thus for step 1, 2 and 3, it will take nearly 10 min for each module. However, you may make it more efficient if you want. I am not gonna to do it, tho. ^-^
   
   1. Try
       driver_i = webDriver.Chorme(), for i \in {1,2, ... ,32}. 
