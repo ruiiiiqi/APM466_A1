@@ -1,0 +1,204 @@
+import csv
+import math
+import matplotlib.pyplot as plt
+from scipy.optimize import fsolve
+import numpy
+
+data = []
+with open('data08.csv') as csvfile:
+    readCSV = csv.reader(csvfile, delimiter=',')
+    for row in readCSV:
+        data.append(row)
+
+        
+def get_yield(d,j,yields0):
+    discounted = 0
+    dirty_price = prices["day{}".format(d)][j]
+    coupon = coupons[j]
+    maturity = maturities[j]
+    for i in range(j):
+        discounted += coupon * 0.5 * math.exp(-yields0[i]*(maturities[i]))
+    return(-1/maturity * math.log((dirty_price-discounted)/(coupon*0.5+100)))
+    
+def get_yield_alt(d,j,yields0):
+    discounted = 0
+    dirty_price = prices["day{}".format(d)][j]
+    coupon = coupons[j]
+    maturity = maturities[j]
+    for i in range(j-1):
+        discounted += coupon * 0.5 * math.exp(-yields0[i]*(0.5*(i+1)))
+    return(-1/maturity * math.log((dirty_price-discounted)/(coupon*0.5+100)))
+                                                            
+# Get maturity
+maturities = []
+for i in range(11):
+    maturities.append(float(data[5][i+1]))
+    
+# Get coupons
+coupons = []
+for i in range(11):
+    coupons.append(float(data[2][i+1]))
+   
+# Get price   
+prices = dict()
+for d in range(10):
+    day_price = []
+    for i in range(11):
+        day_price.append(float(data[6+d][i+1]))
+    prices["day{}".format(d)] = day_price    
+    
+# Produce spot rate
+yields  = []
+for d in range(10):
+    yields_one_day= []
+    for j in range(11):
+        if (j != 5) and (j != 7):
+            yields_one_day.append(get_yield(d,j,yields_one_day))
+        else:
+            estimated_yields = []
+            for k in range(j-1):
+                estimated_yields.append((yields_one_day[k]+yields_one_day[k+1])/2)
+            yields_one_day.append(get_yield_alt(d,j,estimated_yields))
+    yields_one_day.insert(0,"day{}".format(d))
+    yields.append(yields_one_day)
+    
+# Produce ytm:
+ytms = []
+for d in range(10):
+    ytms_one_day= []
+    global bondid
+    for bondid in range(11):
+        if bondid != 5 and  bondid != 7:
+            def f(r):
+                result = 0
+                for x in range(bondid):
+                    result += coupons[bondid]*0.5*math.exp(-r*maturities[x])
+                result += (coupons[bondid]*0.5+100)*math.exp(-r*maturities[bondid])
+                return result - prices[f"day{d}"][bondid]
+            ytms_one_day.append(fsolve(f, 0.004)[0])
+        else:
+            def f(r):
+                result = 0
+                for x in range(bondid-1):
+                    result += coupons[bondid]*0.5*math.exp(-r*(maturities[x]+maturities[x+1])/2)
+                result += (coupons[bondid]*0.5+100)*math.exp(-r*maturities[bondid])
+                return result - prices[f"day{d}"][bondid]            
+            ytms_one_day.append(fsolve(f, 0.004)[0])  
+
+    ytms_one_day.insert(0,"day{}".format(d))
+    ytms.append(ytms_one_day)    
+    
+# Linear interpolation for yields at interger years
+
+yields_at_int = []
+for d in range(10):
+    interpolated_yields_one_day= []
+    for i in range(1,6):
+        interpolated_yields_one_day.append((yields[d][2*i]*(abs(maturities[2*i])-i)+yields[d][2*i+1]*(i - abs(maturities[2*i-1])))/(maturities[2*i]-maturities[2*i-1]))
+    interpolated_yields_one_day.insert(0,'day{}'.format(d))
+    yields_at_int.append(interpolated_yields_one_day)
+
+# calculate forward rates
+forward_rates_detailed = []
+for d in range(10):
+    forward_one_day_detailed = []
+    forward_one_day_detailed.append(yields_at_int[d][1])
+    for i in range(9):
+        forward_one_day_detailed.append((yields[d][i+3]*maturities[i+2]-yields_at_int[d][1]*1)/(maturities[i+2]-1))
+    forward_one_day_detailed.insert(0,'day{}'.format(d))    
+    forward_rates_detailed.append(forward_one_day_detailed)  
+
+forward_rates = []
+for d in range(10):
+    forward_one_day = []
+    forward_one_day.append(yields_at_int[d][1])
+    for i in range(4):
+        forward_one_day.append((yields_at_int[d][i+2]*(i+2)-yields_at_int[d][1]*1)/(i+1))
+    forward_one_day.insert(0,'day{}'.format(d))    
+    forward_rates.append(forward_one_day)    
+   
+'''
+with open('apm466_as1_ytms_v6.csv','a') as file:
+    writer = csv.writer(file)
+    writer.writerows(ytms)
+
+with open('apm466_as1_yields_v6.csv','a') as file:
+    writer = csv.writer(file)
+    writer.writerows(yields)
+   
+with open('apm466_as1_forward_rates_v6.csv','a') as file:
+    writer = csv.writer(file)
+    writer.writerows(forward_rates)                
+
+with open('apm466_as1_forward_rates_detailed_v6.csv','a') as file:
+    writer = csv.writer(file)
+    writer.writerows(forward_rates_detailed)   
+'''
+
+ytms_at_int = []
+for d in range(10):
+    interpolated_ytms_one_day= []
+    for i in range(1,6):
+        interpolated_ytms_one_day.append((ytms[d][2*i]*(abs(maturities[2*i])-i)+ytms[d][2*i+1]*(i - abs(maturities[2*i-1])))/(maturities[2*i]-maturities[2*i-1]))
+    interpolated_ytms_one_day.insert(0,'day{}'.format(d))
+    ytms_at_int.append(interpolated_ytms_one_day)
+    
+    
+# Find time series of ytms
+ytm_series = []
+for i in range(5):
+    ytm_one_maty = []
+    for d in range(10):
+        ytm_one_maty.append(ytms_at_int[d][i+1])
+    ytm_series.append(ytm_one_maty)
+    
+# Find time series of log return of yields
+log_yield_series = []
+for i in range(5):
+    log_yield_one_maty = []
+    for d in range(9):
+        log_yield_one_maty.append(math.log(ytm_series[i][d+1]/ytm_series[i][d]))
+    log_yield_series.append(log_yield_one_maty)
+varcov_yields = numpy.cov(numpy.array(log_yield_series))
+print(varcov_yields)
+print(numpy.linalg.eig(varcov_yields))
+
+# Another way to find forward series: interpolation
+interpolated_forwards = []
+times = maturities
+times.pop(0)
+times.pop(0)
+times.pop(0)
+
+for d in range(10):
+    interpolated_f = []
+    rates = forward_rates_detailed[d]
+    rates.pop(0)
+    rates.pop(0)
+    rates.pop(0)
+    for i in range(4):
+        weighted = (rates[2*i]*(times[2*i+1]-i-2) + rates[2*i+1]*(i+2-times[2*i]))/(times[2*i+1]-times[2*i])
+        interpolated_f.append(weighted)
+    interpolated_forwards.append(interpolated_f)  
+
+
+
+# Find time series of for forward rates
+forward_series = []
+for i in range(4):
+    forward_one_type = []
+    for d in range(10):
+        forward_one_type.append(interpolated_forwards[d][i])
+    forward_series.append(forward_one_type)
+
+    
+log_forward_series = []
+for i in range(4):
+    log_forward_one_maty = []
+    for d in range(9):
+        log_forward_one_maty.append(math.log(forward_series[i][d+1]/forward_series[i][d]))
+    log_forward_series.append(log_forward_one_maty)    
+varcov_forwards = numpy.cov(numpy.array(log_forward_series))
+print("Variance covariance matrix of forward rates is:")
+print(varcov_forwards)
+print(numpy.linalg.eig(varcov_forwards))
